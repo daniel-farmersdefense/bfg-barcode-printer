@@ -1,0 +1,54 @@
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --font-sans: 'IBM Plex Sans', sans-serif;
+  --font-mono: 'IBM Plex Mono', monospace;
+  --color-bg: #f4f3f0;
+  --color-header: #1a1916;
+  --color-card: #ffffff;
+  --color-border: #e2e0db;
+  --color-text: #1a1916;
+  --color-text-muted: #6b6860;
+  --color-accent: #2563eb;
+  --color-accent-hover: #1d4ed8;
+  --color-danger: #dc2626;
+  --color-success: #16a34a;
+}
+
+html, body {
+  font-family: var(--font-sans), 'IBM Plex Sans', sans-serif;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+main {
+  font-family: var(--font-sans), 'IBM Plex Sans', sans-serif;
+}
+
+button {
+  cursor: pointer;
+  font-family: inherit;
+}
+
+input, textarea {
+  font-family: inherit;
+}
+
+@media print {
+  /* Hide everything except the print portal */
+  body > * {
+    display: none !important;
+  }
+  #print-portal {
+    display: block !important;
+  }
+  #print-portal * {
+    visibility: visible !important;
+  }
+}
