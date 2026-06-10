@@ -41,14 +41,61 @@ input, textarea {
 }
 
 @media print {
+  @page {
+    size: 2in 1.5in;
+    margin: 0;
+  }
+
   /* Hide everything except the print portal */
   body > * {
     display: none !important;
   }
+
   #print-portal {
     display: block !important;
+    margin: 0 !important;
+    padding: 0 !important;
   }
-  #print-portal * {
-    visibility: visible !important;
+
+  .print-label {
+    width: 2in !important;
+    height: 1.5in !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 0.1in !important;
+    background: white !important;
+    page-break-after: always !important;
+    break-after: page !important;
+    overflow: hidden !important;
+  }
+
+  .print-label-img {
+    max-width: 100% !important;
+    max-height: 0.9in !important;
+    object-fit: contain !important;
+    display: block !important;
+  }
+
+  .print-label-sku {
+    font-family: 'Courier New', monospace !important;
+    font-size: 8pt !important;
+    font-weight: bold !important;
+    text-align: center !important;
+    margin-top: 0.05in !important;
+    color: black !important;
+  }
+
+  .print-label-name {
+    font-size: 7pt !important;
+    text-align: center !important;
+    color: #333 !important;
+  }
+
+  .print-label-warn {
+    font-size: 8pt !important;
+    color: #b45309 !important;
+    text-align: center !important;
   }
 }
