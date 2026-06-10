@@ -1,4 +1,4 @@
-import { put, list, del } from '@vercel/blob';
+import { createClient } from '@supabase/supabase-js';
 
 export const config = {
   api: {
@@ -8,35 +8,52 @@ export const config = {
   },
 };
 
+function getSupabase() {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_KEY;
+  if (!url || !key) throw new Error('SUPABASE_URL and SUPABASE_SERVICE_KEY must be set in environment variables');
+  return createClient(url, key);
+}
+
 function parseFilename(filename) {
   const base = filename.replace(/\.png$/i, '');
   const parts = base.match(/^(.*?)\(([^)]+)\)\(([^)]+)\)$/);
-  if (parts) {
-    return { name: parts[1].trim(), sku: parts[2].trim(), size: parts[3].trim() };
-  }
+  if (parts) return { name: parts[1].trim(), sku: parts[2].trim(), size: parts[3].trim() };
   const fallback = base.match(/^(.*?)\(([^)]+)\)$/);
-  if (fallback) {
-    return { name: fallback[1].trim(), sku: fallback[2].trim(), size: '' };
-  }
+  if (fallback) return { name: fallback[1].trim(), sku: fallback[2].trim(), size: '' };
   return { name: base, sku: base, size: '' };
 }
 
+const BUCKET = 'barcodes';
+
 export default async function handler(req, res) {
-  // GET — return current library list
+  let supabase;
+  try {
+    supabase = getSupabase();
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+
+  // GET — list all barcodes
   if (req.method === 'GET') {
     try {
-      const { blobs } = await list({ prefix: 'barcodes/' });
-      const items = blobs.map((blob) => {
-        const filename = blob.pathname.replace('barcodes/', '');
-        const parsed = parseFilename(filename);
-        return {
-          filename,
-          dataUrl: blob.url,
-          sku: parsed.sku,
-          name: parsed.name,
-          size: parsed.size,
-        };
-      });
+      const { data, error } = await supabase.storage.from(BUCKET).list('', { limit: 1000 });
+      if (error) throw error;
+
+      const items = (data || [])
+        .filter((f) => f.name.toLowerCase().endsWith('.png'))
+        .map((f) => {
+          const parsed = parseFilename(f.name);
+          const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(f.name);
+          return {
+            filename: f.name,
+            dataUrl: urlData.publicUrl,
+            sku: parsed.sku,
+            name: parsed.name,
+            size: parsed.size,
+          };
+        });
+
       items.sort((a, b) => a.sku.localeCompare(b.sku));
       return res.status(200).json({ items });
     } catch (err) {
@@ -45,38 +62,38 @@ export default async function handler(req, res) {
     }
   }
 
-  // POST — upload one or more PNG files
+  // POST — upload files
   if (req.method === 'POST') {
-    const { files } = req.body; // [{filename, dataUrl}]
+    const { files } = req.body;
     if (!files || !Array.isArray(files) || files.length === 0) {
       return res.status(400).json({ error: 'No files provided' });
     }
     try {
-      const results = [];
       for (const { filename, dataUrl } of files) {
         const base64 = dataUrl.replace(/^data:image\/[^;]+;base64,/, '');
         const buffer = Buffer.from(base64, 'base64');
-        const blob = await put(`barcodes/${filename}`, buffer, {
-          access: 'public',
-          contentType: 'image/png',
-          addRandomSuffix: false,
-          allowOverwrite: true,
-        });
-        results.push({ filename, url: blob.url });
+        const { error } = await supabase.storage
+          .from(BUCKET)
+          .upload(filename, buffer, {
+            contentType: 'image/png',
+            upsert: true,
+          });
+        if (error) throw error;
       }
-      return res.status(200).json({ uploaded: results.length });
+      return res.status(200).json({ uploaded: files.length });
     } catch (err) {
       console.error('Library upload error:', err);
       return res.status(500).json({ error: err.message });
     }
   }
 
-  // DELETE — remove a single file
+  // DELETE — remove a file
   if (req.method === 'DELETE') {
-    const { url } = req.body;
-    if (!url) return res.status(400).json({ error: 'Missing url' });
+    const { filename } = req.body;
+    if (!filename) return res.status(400).json({ error: 'Missing filename' });
     try {
-      await del(url);
+      const { error } = await supabase.storage.from(BUCKET).remove([filename]);
+      if (error) throw error;
       return res.status(200).json({ ok: true });
     } catch (err) {
       return res.status(500).json({ error: err.message });
