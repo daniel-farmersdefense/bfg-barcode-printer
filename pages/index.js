@@ -4,27 +4,72 @@ import Head from 'next/head';
 import Fuse from 'fuse.js';
 import styles from '../styles/Home.module.css';
 
-// Convert a PDF file to an array of data URL images (one per page)
-async function pdfToImages(file) {
+// SKU pattern (same as server) — used for direct PDF text extraction
+const SKU_PATTERN_CLIENT = /\b([A-Z0-9]{2,}-[A-Z0-9]+(?:-[A-Z0-9]+)*)\b/g;
+const STOP_WORDS = new Set(['HTTP', 'HTTPS', 'UTF-8', 'PNG', 'JPG', 'N/A', 'INV', 'SO']);
+
+function isStopWord(sku) {
+  // Filter out order/invoice numbers like SO-478697 or INV-478665 (prefix + all digits)
+  if (/^(SO|INV|PO|REF|ORD)-\d+$/.test(sku)) return true;
+  if (STOP_WORDS.has(sku)) return true;
+  // Filter out hyphenated words that are product descriptions, not SKUs
+  // Real SKUs have all-uppercase segments; description words like "Sea-Weed" won't appear uppercased with both parts being real words
+  // Simple heuristic: if it only has 2 segments and both are common English words, skip
+  const DESCRIPTION_WORDS = new Set(['SEA-WEED', 'WEAR-HOUSE', 'NET-20', 'NET-45', 'PICK-LIST', 'SHIP-TO', 'BILL-TO', 'WALKER-ST', 'PO-BOX', 'ST-WEAR']);
+  if (DESCRIPTION_WORDS.has(sku)) return true;
+  // Filter anything that looks like a location fragment (ends in common location words)
+  if (/^(WALKER|WEAR|HOUSE|PICKING)/.test(sku)) return true;
+  return false;
+}
+
+function extractSkusFromText(text) {
+  const upper = text.toUpperCase();
+  const matches = [...upper.matchAll(SKU_PATTERN_CLIENT)]
+    .map((m) => m[1])
+    .filter((s) => !isStopWord(s));
+
+  // Deduplicate: if a shorter code is a prefix of a longer one, keep only the longer one
+  // e.g. GLV-LH-GBC is dropped if GLV-LH-GBC-L also exists
+  const all = [...new Set(matches)];
+  const filtered = all.filter(
+    (sku) => !all.some((other) => other !== sku && other.startsWith(sku + '-'))
+  );
+
+  return filtered;
+}
+
+// Extract text directly from a PDF (accurate, no OCR needed for text-based PDFs)
+async function extractSkusFromPdf(file) {
   const pdfjsLib = await import('pdfjs-dist');
   pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
 
   const arrayBuffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-  const images = [];
 
+  let fullText = '';
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
-    const viewport = page.getViewport({ scale: 2 }); // 2x for better OCR accuracy
-    const canvas = document.createElement('canvas');
-    canvas.width = viewport.width;
-    canvas.height = viewport.height;
-    const ctx = canvas.getContext('2d');
-    await page.render({ canvasContext: ctx, viewport }).promise;
-    images.push({ name: `${file.name} (page ${i})`, dataUrl: canvas.toDataURL('image/png') });
+    const content = await page.getTextContent();
+    // Join items smartly: glue when previous ends with hyphen OR next starts with hyphen
+    let pageText = '';
+    let lastNonEmpty = '';
+    for (const item of content.items) {
+      const s = item.str;
+      if (!s) continue;
+      const glue = lastNonEmpty.endsWith('-') || s.startsWith('-');
+      if (glue) {
+        pageText += s;
+      } else {
+        pageText += (pageText ? ' ' : '') + s;
+      }
+      lastNonEmpty = s;
+    }
+    // Catch any remaining "- L" patterns
+    const fixed = pageText.replace(/-\s+([A-Z0-9])/g, '-$1');
+    fullText += fixed + '\n';
   }
 
-  return images;
+  return extractSkusFromText(fullText);
 }
 
 // ─── Filename parser ───────────────────────────────────────────────────────────
@@ -47,44 +92,43 @@ function parseFilename(filename) {
 function matchSku(sku, library) {
   if (!library.length) return null;
 
-  // Exact match first
-  const exact = library.find(
-    (e) => e.sku.toLowerCase() === sku.toLowerCase()
-  );
+  const normalize = (s) => s.toUpperCase().trim();
+
+  // 1. Exact match
+  const exact = library.find((e) => normalize(e.sku) === normalize(sku));
   if (exact) return exact;
 
-  // Segment match: split both on [-_ ] and check if any meaningful segments overlap
-  const segments = (s) =>
-    s
-      .toUpperCase()
-      .split(/[-_ ]+/)
-      .filter((x) => x.length > 0);
-
-  const querySegs = segments(sku);
+  // 2. Positional segment scoring — compare segment by segment at each position
+  const segs = (s) => normalize(s).split(/[-_ ]+/).filter(Boolean);
+  const querySegs = segs(sku);
 
   let bestEntry = null;
-  let bestScore = 0;
+  let bestScore = -Infinity;
 
   for (const entry of library) {
-    const entrySegs = segments(entry.sku);
-    const matches = querySegs.filter((qs) => entrySegs.includes(qs)).length;
-    const score = matches / Math.max(querySegs.length, entrySegs.length);
+    const entrySegs = segs(entry.sku);
+
+    // Positional matches score higher than unordered matches
+    let positionalMatches = 0;
+    const maxLen = Math.max(querySegs.length, entrySegs.length);
+    for (let i = 0; i < maxLen; i++) {
+      if (querySegs[i] && entrySegs[i] && querySegs[i] === entrySegs[i]) {
+        positionalMatches++;
+      }
+    }
+
+    // Penalize any segment mismatch (catches L vs M at last position)
+    const mismatches = maxLen - positionalMatches;
+    const score = positionalMatches - mismatches * 0.6;
+
     if (score > bestScore) {
       bestScore = score;
       bestEntry = entry;
     }
   }
 
-  if (bestScore >= 0.4) return bestEntry;
-
-  // Fuse.js fuzzy fallback
-  const fuse = new Fuse(library, {
-    keys: ['sku', 'name'],
-    threshold: 0.4,
-    includeScore: true,
-  });
-  const results = fuse.search(sku);
-  if (results.length > 0) return results[0].item;
+  // Must have at least 1 positional match and positive score
+  if (bestScore > 0) return bestEntry;
 
   return null;
 }
@@ -200,31 +244,61 @@ export default function Home() {
   const orderFileInputRef = useRef();
 
   async function processOrderImages(files) {
-    // Expand PDFs into per-page images; read image files as data URLs
-    const expanded = [];
+    // PDFs: extract text directly (accurate). Images: send to OCR via API.
+    const pdfSkus = [];
+    const imageFiles = [];
+
     for (const f of files) {
       if (f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')) {
         try {
-          const pages = await pdfToImages(f);
-          expanded.push(...pages);
+          setScanQueue((prev) => [...prev, f.name]);
+          setScanning(true);
+          setScanError('');
+          const skus = await extractSkusFromPdf(f);
+          pdfSkus.push(...skus);
+          setScreenshots((prev) => [...prev, { name: f.name, dataUrl: null }]);
+          setScanQueue((prev) => prev.filter((n) => n !== f.name));
+          if (skus.length === 0) {
+            setScanError(`No SKUs found in "${f.name}". Try adding them manually.`);
+          }
         } catch (err) {
           setScanError(`Could not read PDF "${f.name}": ${err.message}`);
+          setScanQueue((prev) => prev.filter((n) => n !== f.name));
         }
       } else {
-        await new Promise((resolve) => {
-          const reader = new FileReader();
-          reader.onload = (ev) => {
-            expanded.push({ name: f.name, dataUrl: ev.target.result });
-            resolve();
-          };
-          reader.readAsDataURL(f);
-        });
+        imageFiles.push(f);
       }
+    }
+
+    // Add PDF SKUs immediately
+    if (pdfSkus.length > 0) {
+      setSkus((prev) => {
+        const merged = [...prev];
+        for (const sku of pdfSkus) {
+          if (!merged.some((s) => s.toLowerCase() === sku.toLowerCase())) merged.push(sku);
+        }
+        return merged;
+      });
+      setScanning(false);
+    }
+
+    // For image files, read as data URLs and send to OCR
+    const expanded = [];
+    for (const f of imageFiles) {
+      await new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          expanded.push({ name: f.name, dataUrl: ev.target.result });
+          resolve();
+        };
+        reader.readAsDataURL(f);
+      });
     }
     const newScreenshots = expanded;
 
     if (newScreenshots.length === 0) {
-      setScanError('Could not read any images from the file(s). Try a different file.');
+      // All files were PDFs handled above — nothing left to OCR
+      setScanning(false);
       return;
     }
 
@@ -448,7 +522,7 @@ export default function Home() {
                   <div className={styles.cardTitle}>Loaded Barcodes</div>
                   <div className={styles.libraryGrid}>
                     {library.map((entry) => (
-                      <div key={entry.sku} className={styles.libraryItem}>
+                      <div key={entry.filename} className={styles.libraryItem}>
                         <img
                           src={entry.dataUrl}
                           alt={entry.sku}
@@ -495,7 +569,7 @@ export default function Home() {
                     {scanning ? 'Scanning…' : 'Drop order screenshots here or click to browse'}
                   </div>
                   <div className={styles.dropZoneHint}>
-                    Supported: PNG, JPG, WEBP, PDF — OCR will extract SKU codes automatically
+                    Recommended: PDF pick lists — SKUs extracted automatically
                   </div>
                   {scanning && <div className={styles.spinner} style={{ margin: '10px auto 0' }} />}
                 </div>
