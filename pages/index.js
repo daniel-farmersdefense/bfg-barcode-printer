@@ -1,7 +1,42 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import Head from 'next/head';
+import Script from 'next/script';
 import styles from '../styles/Home.module.css';
+
+// Generate SVG string for sign label (used by QZ Tray direct printing)
+function generateSignSvg(text, unitsPerBox, date, width = 576, height = 384) {
+  const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
+  if (!lines.length) return '';
+  const showUnits = String(unitsPerBox).trim() !== '' || String(date).trim() !== '';
+  const stripH = showUnits ? Math.round(height * 0.20) : 0;
+  const textH = height - stripH;
+  const lineH = textH / lines.length;
+  const fontSize = Math.round(lineH * 0.80);
+  const pad = Math.round(width * 0.03);
+  const boxW = Math.round(width * 0.28);
+  const boxH = Math.round(stripH * 0.80);
+  const boxX = width - boxW - Math.round(width * 0.02);
+  const boxY = textH + Math.round((stripH - boxH) / 2);
+  const boxFontSize = Math.round(boxH * 0.62);
+
+  let s = `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg" style="background:white">`;
+  lines.forEach((line, i) => {
+    s += `<text x="${width / 2}" y="${Math.round((i + 0.5) * lineH)}" text-anchor="middle" dominant-baseline="central" font-weight="900" font-family="Arial Black,Arial,sans-serif" font-size="${fontSize}" textLength="${width - pad * 2}" lengthAdjust="spacingAndGlyphs" fill="black">${line || ' '}</text>`;
+  });
+  if (showUnits) {
+    s += `<line x1="0" y1="${textH}" x2="${width}" y2="${textH}" stroke="#ccc" stroke-width="1"/>`;
+    if (String(date).trim()) {
+      s += `<text x="${Math.round(width * 0.03)}" y="${boxY + boxH / 2}" text-anchor="start" dominant-baseline="central" font-weight="700" font-family="Arial,sans-serif" font-size="${boxFontSize}" fill="black">${String(date).trim()}</text>`;
+    }
+    if (String(unitsPerBox).trim()) {
+      s += `<rect x="${boxX}" y="${boxY}" width="${boxW}" height="${boxH}" rx="5" ry="5" fill="white" stroke="black" stroke-width="3"/>`;
+      s += `<text x="${boxX + boxW / 2}" y="${boxY + boxH / 2}" text-anchor="middle" dominant-baseline="central" font-weight="900" font-family="Arial Black,Arial,sans-serif" font-size="${boxFontSize}" fill="black">${String(unitsPerBox).trim()}</text>`;
+    }
+  }
+  s += '</svg>';
+  return s;
+}
 
 // SKU pattern — used for direct PDF text extraction
 const SKU_PATTERN_CLIENT = /\b([A-Z0-9]{2,}-[A-Z0-9]+(?:-[A-Z0-9]+)*)\b/g;
@@ -208,7 +243,40 @@ export default function Home() {
   const [signDate, setSignDate] = useState(() =>
     new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })
   );
+  const [qzPrinting, setQzPrinting] = useState(false);
+  const [qzError, setQzError] = useState('');
   const [printMode, setPrintMode] = useState('barcodes'); // 'barcodes' | 'sign'
+
+  // Print directly to Pack 3 via QZ Tray (bypasses browser print dialog)
+  async function printViaQZ() {
+    const qz = window.qz;
+    if (!qz) {
+      setQzError('QZ Tray not detected. Make sure QZ Tray is running (check your taskbar).');
+      return;
+    }
+    setQzPrinting(true);
+    setQzError('');
+    try {
+      if (!qz.websocket.isActive()) {
+        await qz.websocket.connect();
+      }
+      const config = qz.configs.create('Pack 3', {
+        size: { width: 4, height: 6 },
+        units: 'in',
+        orientation: 'landscape',
+        copies: signQty,
+        colorType: 'blackwhite',
+      });
+      const svg = generateSignSvg(signText, signUnits, signDate);
+      const html = `<!DOCTYPE html><html><head><style>*{margin:0;padding:0;box-sizing:border-box;}body{width:6in;height:4in;background:white;overflow:hidden;}</style></head><body>${svg}</body></html>`;
+      await qz.print(config, [{ type: 'pixel', format: 'html', flavor: 'plain', data: html }]);
+    } catch (err) {
+      console.error('QZ print error:', err);
+      setQzError('Print failed: ' + err.message + ' — Make sure QZ Tray is running.');
+    } finally {
+      setQzPrinting(false);
+    }
+  }
 
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
@@ -467,6 +535,7 @@ export default function Home() {
         <title>BFG Barcode Printer</title>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </Head>
+      <Script src="https://cdn.qz.io/qz-tray/qz-tray.js" strategy="lazyOnload" />
 
       <div className={styles.container}>
         <header className={`${styles.header} ${styles.noPrint}`}>
@@ -830,10 +899,19 @@ export default function Home() {
                   </div>
                   <button
                     className={`${styles.btn} ${styles.btnPrimary}`}
+                    onClick={printViaQZ}
+                    disabled={!signText.trim() || qzPrinting}
+                    title="Print directly to Pack 3 Zebra via QZ Tray"
+                  >
+                    {qzPrinting ? 'Sending to Pack 3…' : `Print to Pack 3${signQty > 1 ? ` (${signQty})` : ''}`}
+                  </button>
+                  <button
+                    className={`${styles.btn} ${styles.btnSecondary}`}
                     onClick={() => handlePrint('sign')}
                     disabled={!signText.trim()}
+                    title="Use browser print dialog"
                   >
-                    Print {signQty > 1 ? `${signQty} Labels` : 'Label'}
+                    Browser Print
                   </button>
                   {signText.trim() && (
                     <button
@@ -845,6 +923,12 @@ export default function Home() {
                   )}
                 </div>
               </div>
+
+              {qzError && (
+                <div style={{ marginTop: 10, padding: '10px 14px', background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 5, fontSize: 13, color: '#991b1b' }}>
+                  {qzError}
+                </div>
+              )}
 
               {/* Live preview */}
               {signText.trim() && (
