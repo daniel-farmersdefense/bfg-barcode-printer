@@ -99,11 +99,11 @@ const LABEL_H_PX = 144; // 1.5in at 96dpi
 
 // SVG sign label — auto-stretches each line to fill the width
 // unitsPerBox: optional number shown in bottom-right corner box
-function SignPreview({ text, width = 576, height = 384, unitsPerBox = '' }) {
+function SignPreview({ text, width = 576, height = 384, unitsPerBox = '', date = '' }) {
   const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
   if (!lines.length) return null;
 
-  const showUnits = String(unitsPerBox).trim() !== '';
+  const showUnits = String(unitsPerBox).trim() !== '' || String(date).trim() !== '';
 
   // Bottom strip height — fixed at 20% of total height when showing units
   const stripH = showUnits ? Math.round(height * 0.20) : 0;
@@ -164,7 +164,7 @@ function SignPreview({ text, width = 576, height = 384, unitsPerBox = '' }) {
           fontSize={boxFontSize}
           fill="black"
         >
-          {new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })}
+          {String(date).trim()}
         </text>
       )}
 
@@ -205,6 +205,9 @@ export default function Home() {
   const [signText, setSignText] = useState('');
   const [signQty, setSignQty] = useState(1);
   const [signUnits, setSignUnits] = useState('');
+  const [signDate, setSignDate] = useState(() =>
+    new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })
+  );
   const [printMode, setPrintMode] = useState('barcodes'); // 'barcodes' | 'sign'
 
   const [mounted, setMounted] = useState(false);
@@ -433,7 +436,7 @@ export default function Home() {
       {printMode === 'sign' ? (
         Array.from({ length: signQty }, (_, i) => (
           <div key={i} className="sign-print-label">
-            <SignPreview text={signText} width={576} height={384} unitsPerBox={signUnits} />
+            <SignPreview text={signText} width={576} height={384} unitsPerBox={signUnits} date={signDate} />
           </div>
         ))
       ) : (
@@ -803,6 +806,16 @@ export default function Home() {
                     />
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <label style={{ fontSize: 13, color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>Date</label>
+                    <input
+                      type="text"
+                      value={signDate}
+                      onChange={(e) => setSignDate(e.target.value)}
+                      className={styles.input}
+                      style={{ width: 110, textAlign: 'center', fontSize: 13, fontWeight: 600 }}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <label style={{ fontSize: 13, color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>
                       Units / Box
                     </label>
@@ -845,7 +858,7 @@ export default function Home() {
                     width: '100%',
                     maxWidth: 480,
                   }}>
-                    <SignPreview text={signText} width={480} height={320} unitsPerBox={signUnits} />
+                    <SignPreview text={signText} width={480} height={320} unitsPerBox={signUnits} date={signDate} />
                   </div>
                 </div>
               )}
