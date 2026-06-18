@@ -590,7 +590,7 @@ gYtINOnw6FJxmGqeu/Bz+RXrt2Ms0cv4KJSMUZEzqA==
         <title>BFG Barcode Printer</title>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </Head>
-      <Script src="https://cdn.qz.io/qz-tray/qz-tray.js" strategy="lazyOnload" />
+      <Script src="https://cdn.qz.io/qz-tray/qz-tray.js" strategy="afterInteractive" />
 
       <div className={styles.container}>
         <header className={`${styles.header} ${styles.noPrint}`}>
