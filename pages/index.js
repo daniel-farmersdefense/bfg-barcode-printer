@@ -247,7 +247,7 @@ export default function Home() {
   const [qzError, setQzError] = useState('');
   const [printMode, setPrintMode] = useState('barcodes'); // 'barcodes' | 'sign'
 
-  // Print directly to Pack 3 via QZ Tray (bypasses browser print dialog)
+  // Print directly to Pack 3 Zebra via QZ Tray over network (raw socket, bypasses Windows driver)
   async function printViaQZ() {
     const qz = window.qz;
     if (!qz) {
@@ -260,16 +260,32 @@ export default function Home() {
       if (!qz.websocket.isActive()) {
         await qz.websocket.connect();
       }
-      const config = qz.configs.create('Pack 3', {
-        size: { width: 4, height: 6 },
-        units: 'in',
-        orientation: 'landscape',
-        copies: signQty,
-        colorType: 'blackwhite',
+
+      // Build ZPL directly — bypasses Windows driver entirely, sent raw to port 9100
+      const svg = generateSignSvg(signText, signUnits, signDate, 812, 609); // 4in x 3in at 203dpi (label area)
+      const html = `<!DOCTYPE html><html><head><style>*{margin:0;padding:0;}body{width:812px;height:609px;background:white;overflow:hidden;}</style></head><body>${svg}</body></html>`;
+
+      // Use network config — sends directly to Zebra IP:9100, no driver involved
+      const config = qz.configs.create({ host: '10.14.217.15', port: 9100 }, {
+        encoding: null,
       });
-      const svg = generateSignSvg(signText, signUnits, signDate);
-      const html = `<!DOCTYPE html><html><head><style>*{margin:0;padding:0;box-sizing:border-box;}body{width:6in;height:4in;background:white;overflow:hidden;}</style></head><body>${svg}</body></html>`;
-      await qz.print(config, [{ type: 'pixel', format: 'html', flavor: 'plain', data: html }]);
+
+      for (let i = 0; i < signQty; i++) {
+        await qz.print(config, [{
+          type: 'pixel',
+          format: 'html',
+          flavor: 'plain',
+          data: html,
+          options: {
+            pageWidth: 4,
+            pageHeight: 6,
+            units: 'in',
+            orientation: 'landscape',
+            density: 203,
+            colorType: 'blackwhite',
+          }
+        }]);
+      }
     } catch (err) {
       console.error('QZ print error:', err);
       setQzError('Print failed: ' + err.message + ' — Make sure QZ Tray is running.');
