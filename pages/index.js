@@ -103,20 +103,21 @@ function SignPreview({ text, width = 576, height = 384, unitsPerBox = '' }) {
   const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
   if (!lines.length) return null;
 
-  const showUnits = unitsPerBox.toString().trim() !== '';
+  const showUnits = String(unitsPerBox).trim() !== '';
 
-  // Reserve bottom strip if showing units
-  const reservedBottom = showUnits ? height * 0.18 : 0;
-  const textHeight = height - reservedBottom;
-  const lineH = textHeight / lines.length;
-  const fontSize = lineH * 0.82;
-  const pad = width * 0.04;
+  // Bottom strip height — fixed at 20% of total height when showing units
+  const stripH = showUnits ? Math.round(height * 0.20) : 0;
+  const textH = height - stripH;
+  const lineH = textH / lines.length;
+  const fontSize = Math.round(lineH * 0.80);
+  const pad = Math.round(width * 0.03);
 
-  // Units box dimensions (bottom-right)
-  const bw = width * 0.25;
-  const bh = reservedBottom * 0.78;
-  const bx = width - bw - width * 0.025;
-  const by = height - bh - height * 0.025;
+  // Units box: sits in the bottom strip, right-aligned
+  const boxW = Math.round(width * 0.28);
+  const boxH = Math.round(stripH * 0.80);
+  const boxX = width - boxW - Math.round(width * 0.02);
+  const boxY = textH + Math.round((stripH - boxH) / 2);
+  const boxFontSize = Math.round(boxH * 0.62);
 
   return (
     <svg
@@ -125,12 +126,14 @@ function SignPreview({ text, width = 576, height = 384, unitsPerBox = '' }) {
       height={height}
       xmlns="http://www.w3.org/2000/svg"
       style={{ display: 'block', background: 'white' }}
+      overflow="hidden"
     >
+      {/* Main text lines */}
       {lines.map((line, i) => (
         <text
           key={i}
           x={width / 2}
-          y={(i + 0.5) * lineH}
+          y={Math.round((i + 0.5) * lineH)}
           textAnchor="middle"
           dominantBaseline="central"
           fontWeight="900"
@@ -138,29 +141,43 @@ function SignPreview({ text, width = 576, height = 384, unitsPerBox = '' }) {
           fontSize={fontSize}
           textLength={width - pad * 2}
           lengthAdjust="spacingAndGlyphs"
+          fill="black"
         >
           {line || ' '}
         </text>
       ))}
 
+      {/* Divider line above bottom strip */}
+      {showUnits && (
+        <line
+          x1={0} y1={textH}
+          x2={width} y2={textH}
+          stroke="#ccc" strokeWidth={1}
+        />
+      )}
+
+      {/* Units box — bottom right */}
       {showUnits && (
         <>
           <rect
-            x={bx} y={by} width={bw} height={bh}
-            rx={4} ry={4}
-            fill="white" stroke="black"
-            strokeWidth={Math.max(2, width * 0.005)}
+            x={boxX} y={boxY}
+            width={boxW} height={boxH}
+            rx={5} ry={5}
+            fill="white"
+            stroke="black"
+            strokeWidth={3}
           />
           <text
-            x={bx + bw / 2}
-            y={by + bh / 2}
+            x={boxX + boxW / 2}
+            y={boxY + boxH / 2}
             textAnchor="middle"
             dominantBaseline="central"
             fontWeight="900"
             fontFamily="Arial Black, Arial, sans-serif"
-            fontSize={bh * 0.58}
+            fontSize={boxFontSize}
+            fill="black"
           >
-            {unitsPerBox}
+            {String(unitsPerBox).trim()}
           </text>
         </>
       )}
