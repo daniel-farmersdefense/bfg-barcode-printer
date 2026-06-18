@@ -98,12 +98,26 @@ const LABEL_W_PX = 192; // 2in at 96dpi
 const LABEL_H_PX = 144; // 1.5in at 96dpi
 
 // SVG sign label — auto-stretches each line to fill the width
-function SignPreview({ text, width = 576, height = 384 }) {
+// unitsPerBox: optional number shown in bottom-right corner box
+function SignPreview({ text, width = 576, height = 384, unitsPerBox = '' }) {
   const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
   if (!lines.length) return null;
-  const lineH = height / lines.length;
+
+  const showUnits = unitsPerBox.toString().trim() !== '';
+
+  // Reserve bottom strip if showing units
+  const reservedBottom = showUnits ? height * 0.18 : 0;
+  const textHeight = height - reservedBottom;
+  const lineH = textHeight / lines.length;
   const fontSize = lineH * 0.82;
   const pad = width * 0.04;
+
+  // Units box dimensions (bottom-right)
+  const bw = width * 0.25;
+  const bh = reservedBottom * 0.78;
+  const bx = width - bw - width * 0.025;
+  const by = height - bh - height * 0.025;
+
   return (
     <svg
       viewBox={`0 0 ${width} ${height}`}
@@ -128,6 +142,28 @@ function SignPreview({ text, width = 576, height = 384 }) {
           {line || ' '}
         </text>
       ))}
+
+      {showUnits && (
+        <>
+          <rect
+            x={bx} y={by} width={bw} height={bh}
+            rx={4} ry={4}
+            fill="white" stroke="black"
+            strokeWidth={Math.max(2, width * 0.005)}
+          />
+          <text
+            x={bx + bw / 2}
+            y={by + bh / 2}
+            textAnchor="middle"
+            dominantBaseline="central"
+            fontWeight="900"
+            fontFamily="Arial Black, Arial, sans-serif"
+            fontSize={bh * 0.58}
+          >
+            {unitsPerBox}
+          </text>
+        </>
+      )}
     </svg>
   );
 }
@@ -146,6 +182,7 @@ export default function Home() {
   // Sign tab state
   const [signText, setSignText] = useState('');
   const [signQty, setSignQty] = useState(1);
+  const [signUnits, setSignUnits] = useState('');
   const [printMode, setPrintMode] = useState('barcodes'); // 'barcodes' | 'sign'
 
   const [mounted, setMounted] = useState(false);
@@ -374,7 +411,7 @@ export default function Home() {
       {printMode === 'sign' ? (
         Array.from({ length: signQty }, (_, i) => (
           <div key={i} className="sign-print-label">
-            <SignPreview text={signText} width={576} height={384} />
+            <SignPreview text={signText} width={576} height={384} unitsPerBox={signUnits} />
           </div>
         ))
       ) : (
@@ -731,7 +768,7 @@ export default function Home() {
                 <div style={{ marginTop: 14, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <label style={{ fontSize: 13, color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>
-                      Qty (boxes)
+                      # of Labels
                     </label>
                     <input
                       type="number"
@@ -741,6 +778,19 @@ export default function Home() {
                       onChange={(e) => setSignQty(Math.max(1, Math.min(99, Number(e.target.value) || 1)))}
                       className={styles.input}
                       style={{ width: 70, textAlign: 'center', fontSize: 16, fontWeight: 700 }}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <label style={{ fontSize: 13, color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>
+                      Units / Box
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="70"
+                      value={signUnits}
+                      onChange={(e) => setSignUnits(e.target.value)}
+                      className={styles.input}
+                      style={{ width: 80, textAlign: 'center', fontSize: 16, fontWeight: 700 }}
                     />
                   </div>
                   <button
@@ -773,7 +823,7 @@ export default function Home() {
                     width: '100%',
                     maxWidth: 480,
                   }}>
-                    <SignPreview text={signText} width={480} height={320} />
+                    <SignPreview text={signText} width={480} height={320} unitsPerBox={signUnits} />
                   </div>
                 </div>
               )}
