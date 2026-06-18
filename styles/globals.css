@@ -98,4 +98,21 @@ input, textarea {
     color: #b45309 !important;
     text-align: center !important;
   }
+
+  /* Sign label — 4"×6" landscape (6in wide × 4in tall) */
+  .sign-print-label {
+    width: 6in !important;
+    height: 4in !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    background: white !important;
+    page-break-after: always !important;
+    break-after: page !important;
+  }
+
+  .sign-print-label svg {
+    width: 6in !important;
+    height: 4in !important;
+  }
 }

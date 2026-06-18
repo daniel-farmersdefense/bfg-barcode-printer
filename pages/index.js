@@ -93,9 +93,44 @@ function matchSku(sku, library) {
   return null;
 }
 
-// Fixed label dimensions: 2" × 1.5"
+// Fixed barcode label dimensions: 2" × 1.5"
 const LABEL_W_PX = 192; // 2in at 96dpi
 const LABEL_H_PX = 144; // 1.5in at 96dpi
+
+// SVG sign label — auto-stretches each line to fill the width
+function SignPreview({ text, width = 576, height = 384 }) {
+  const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
+  if (!lines.length) return null;
+  const lineH = height / lines.length;
+  const fontSize = lineH * 0.82;
+  const pad = width * 0.04;
+  return (
+    <svg
+      viewBox={`0 0 ${width} ${height}`}
+      width={width}
+      height={height}
+      xmlns="http://www.w3.org/2000/svg"
+      style={{ display: 'block', background: 'white' }}
+    >
+      {lines.map((line, i) => (
+        <text
+          key={i}
+          x={width / 2}
+          y={(i + 0.5) * lineH}
+          textAnchor="middle"
+          dominantBaseline="central"
+          fontWeight="900"
+          fontFamily="Arial Black, Arial, sans-serif"
+          fontSize={fontSize}
+          textLength={width - pad * 2}
+          lengthAdjust="spacingAndGlyphs"
+        >
+          {line || ' '}
+        </text>
+      ))}
+    </svg>
+  );
+}
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState('library');
@@ -107,6 +142,10 @@ export default function Home() {
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState('');
   const folderInputRef = useRef();
+
+  // Sign tab state
+  const [signText, setSignText] = useState('');
+  const [printMode, setPrintMode] = useState('barcodes'); // 'barcodes' | 'sign'
 
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
@@ -310,28 +349,50 @@ export default function Home() {
 
   const matchedLabels = skus.map((sku) => ({ sku, match: matchSku(sku, library) }));
 
-  function handlePrint() { window.print(); }
+  function handlePrint(mode = 'barcodes') {
+    // Inject/update @page size so each print mode uses the right paper dimensions
+    let styleEl = document.getElementById('dynamic-print-page');
+    if (!styleEl) {
+      styleEl = document.createElement('style');
+      styleEl.id = 'dynamic-print-page';
+      document.head.appendChild(styleEl);
+    }
+    if (mode === 'sign') {
+      styleEl.textContent = '@media print { @page { size: 6in 4in; margin: 0; } }';
+    } else {
+      styleEl.textContent = '@media print { @page { size: 2in 1.5in; margin: 0; } }';
+    }
+    setPrintMode(mode);
+    // Give React one tick to update the portal before printing
+    setTimeout(() => window.print(), 60);
+  }
 
   // Print portal — renders at body level, shown only during print
   const printContent = (
     <div id="print-portal" style={{ display: 'none', margin: 0, padding: 0, background: 'white' }}>
-      {matchedLabels.map(({ sku, match }) => (
-        <div key={sku} className="print-label">
-          {match ? (
-            <>
-              <img src={match.dataUrl} alt={match.sku} className="print-label-img" />
-              <div className="print-label-sku">{match.sku}</div>
-              {match.name && <div className="print-label-name">{match.name}</div>}
-              {match.size && <div className="print-label-name">{match.size}</div>}
-            </>
-          ) : (
-            <>
-              <div className="print-label-warn">⚠ No barcode found</div>
-              <div className="print-label-sku">{sku}</div>
-            </>
-          )}
+      {printMode === 'sign' ? (
+        <div className="sign-print-label">
+          <SignPreview text={signText} width={576} height={384} />
         </div>
-      ))}
+      ) : (
+        matchedLabels.map(({ sku, match }) => (
+          <div key={sku} className="print-label">
+            {match ? (
+              <>
+                <img src={match.dataUrl} alt={match.sku} className="print-label-img" />
+                <div className="print-label-sku">{match.sku}</div>
+                {match.name && <div className="print-label-name">{match.name}</div>}
+                {match.size && <div className="print-label-name">{match.size}</div>}
+              </>
+            ) : (
+              <>
+                <div className="print-label-warn">⚠ No barcode found</div>
+                <div className="print-label-sku">{sku}</div>
+              </>
+            )}
+          </div>
+        ))
+      )}
     </div>
   );
 
@@ -353,6 +414,7 @@ export default function Home() {
             { id: 'library', label: `Library${library.length ? ` (${library.length})` : ''}` },
             { id: 'order', label: `Order${skus.length ? ` (${skus.length})` : ''}` },
             { id: 'print', label: `Print${matchedLabels.length ? ` (${matchedLabels.length})` : ''}` },
+            { id: 'sign', label: 'Sign Label' },
           ].map((t) => (
             <button
               key={t.id}
@@ -646,6 +708,65 @@ export default function Home() {
               )}
             </div>
           )}
+          {/* ══════════ SIGN LABEL TAB ══════════ */}
+          {activeTab === 'sign' && (
+            <div>
+              <div className={styles.card}>
+                <div className={styles.cardTitle}>Shelf Sign Label</div>
+                <p style={{ fontSize: 13, color: 'var(--color-text-muted)', marginBottom: 14 }}>
+                  Type what you want on the label. Each line prints as its own row — text auto-sizes to fill the label.
+                  Prints on a <strong>4" × 6" landscape</strong> label.
+                </p>
+                <textarea
+                  className={styles.input}
+                  rows={3}
+                  placeholder={'MON\nor\nUVH-W-MON\nMEDIUM'}
+                  value={signText}
+                  onChange={(e) => setSignText(e.target.value.toUpperCase())}
+                  style={{ fontFamily: 'var(--font-mono)', fontSize: 22, fontWeight: 700, letterSpacing: 1, resize: 'vertical', textTransform: 'uppercase' }}
+                />
+                <div style={{ marginTop: 14, display: 'flex', gap: 10, alignItems: 'center' }}>
+                  <button
+                    className={`${styles.btn} ${styles.btnPrimary}`}
+                    onClick={() => handlePrint('sign')}
+                    disabled={!signText.trim()}
+                  >
+                    Print Sign Label
+                  </button>
+                  {signText.trim() && (
+                    <button
+                      className={`${styles.btn} ${styles.btnDanger} ${styles.btnSm}`}
+                      onClick={() => setSignText('')}
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Live preview */}
+              {signText.trim() && (
+                <div className={styles.card}>
+                  <div className={styles.cardTitle}>Preview — 4" × 6" Landscape</div>
+                  <div style={{
+                    border: '2px solid var(--color-border)',
+                    borderRadius: 6,
+                    overflow: 'hidden',
+                    display: 'inline-block',
+                    width: '100%',
+                    maxWidth: 480,
+                  }}>
+                    <SignPreview
+                      text={signText}
+                      width={480}
+                      height={320}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
         </div>
       </div>
 
