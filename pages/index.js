@@ -149,24 +149,29 @@ function SignPreview({ text, width = 576, height = 384, unitsPerBox = '' }) {
 
       {/* Divider line above bottom strip */}
       {showUnits && (
-        <line
-          x1={0} y1={textH}
-          x2={width} y2={textH}
-          stroke="#ccc" strokeWidth={1}
-        />
+        <line x1={0} y1={textH} x2={width} y2={textH} stroke="#ccc" strokeWidth={1} />
+      )}
+
+      {/* Date — bottom left */}
+      {showUnits && (
+        <text
+          x={Math.round(width * 0.03)}
+          y={boxY + boxH / 2}
+          textAnchor="start"
+          dominantBaseline="central"
+          fontWeight="700"
+          fontFamily="Arial, sans-serif"
+          fontSize={boxFontSize}
+          fill="black"
+        >
+          {new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })}
+        </text>
       )}
 
       {/* Units box — bottom right */}
       {showUnits && (
         <>
-          <rect
-            x={boxX} y={boxY}
-            width={boxW} height={boxH}
-            rx={5} ry={5}
-            fill="white"
-            stroke="black"
-            strokeWidth={3}
-          />
+          <rect x={boxX} y={boxY} width={boxW} height={boxH} rx={5} ry={5} fill="white" stroke="black" strokeWidth={3} />
           <text
             x={boxX + boxW / 2}
             y={boxY + boxH / 2}
