@@ -98,12 +98,26 @@ const LABEL_W_PX = 192; // 2in at 96dpi
 const LABEL_H_PX = 144; // 1.5in at 96dpi
 
 // SVG sign label — auto-stretches each line to fill the width
-function SignPreview({ text, width = 576, height = 384 }) {
+// boxNum / totalBoxes: optional box count shown in bottom-right corner
+function SignPreview({ text, width = 576, height = 384, boxNum = null, totalBoxes = null }) {
   const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
   if (!lines.length) return null;
-  const lineH = height / lines.length;
+
+  const showBox = boxNum !== null && totalBoxes !== null;
+
+  // Reserve bottom strip for box counter if shown
+  const reservedBottom = showBox ? height * 0.14 : 0;
+  const textHeight = height - reservedBottom;
+  const lineH = textHeight / lines.length;
   const fontSize = lineH * 0.82;
   const pad = width * 0.04;
+
+  // Box counter dimensions (bottom-right corner)
+  const bw = width * 0.22;
+  const bh = reservedBottom * 0.82;
+  const bx = width - bw - width * 0.02;
+  const by = height - bh - height * 0.02;
+
   return (
     <svg
       viewBox={`0 0 ${width} ${height}`}
@@ -128,6 +142,24 @@ function SignPreview({ text, width = 576, height = 384 }) {
           {line || ' '}
         </text>
       ))}
+
+      {showBox && (
+        <>
+          <rect x={bx} y={by} width={bw} height={bh} rx={4} ry={4}
+            fill="white" stroke="black" strokeWidth={Math.max(1.5, width * 0.004)} />
+          <text
+            x={bx + bw / 2}
+            y={by + bh / 2}
+            textAnchor="middle"
+            dominantBaseline="central"
+            fontWeight="700"
+            fontFamily="Arial, sans-serif"
+            fontSize={bh * 0.52}
+          >
+            {`BOX ${boxNum} / ${totalBoxes}`}
+          </text>
+        </>
+      )}
     </svg>
   );
 }
@@ -145,6 +177,7 @@ export default function Home() {
 
   // Sign tab state
   const [signText, setSignText] = useState('');
+  const [signQty, setSignQty] = useState(1);
   const [printMode, setPrintMode] = useState('barcodes'); // 'barcodes' | 'sign'
 
   const [mounted, setMounted] = useState(false);
@@ -371,9 +404,17 @@ export default function Home() {
   const printContent = (
     <div id="print-portal" style={{ display: 'none', margin: 0, padding: 0, background: 'white' }}>
       {printMode === 'sign' ? (
-        <div className="sign-print-label">
-          <SignPreview text={signText} width={576} height={384} />
-        </div>
+        Array.from({ length: signQty }, (_, i) => (
+          <div key={i} className="sign-print-label">
+            <SignPreview
+              text={signText}
+              width={576}
+              height={384}
+              boxNum={i + 1}
+              totalBoxes={signQty}
+            />
+          </div>
+        ))
       ) : (
         matchedLabels.map(({ sku, match }) => (
           <div key={sku} className="print-label">
@@ -725,13 +766,27 @@ export default function Home() {
                   onChange={(e) => setSignText(e.target.value.toUpperCase())}
                   style={{ fontFamily: 'var(--font-mono)', fontSize: 22, fontWeight: 700, letterSpacing: 1, resize: 'vertical', textTransform: 'uppercase' }}
                 />
-                <div style={{ marginTop: 14, display: 'flex', gap: 10, alignItems: 'center' }}>
+                <div style={{ marginTop: 14, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <label style={{ fontSize: 13, color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>
+                      Qty (boxes)
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={99}
+                      value={signQty}
+                      onChange={(e) => setSignQty(Math.max(1, Math.min(99, Number(e.target.value) || 1)))}
+                      className={styles.input}
+                      style={{ width: 70, textAlign: 'center', fontSize: 16, fontWeight: 700 }}
+                    />
+                  </div>
                   <button
                     className={`${styles.btn} ${styles.btnPrimary}`}
                     onClick={() => handlePrint('sign')}
                     disabled={!signText.trim()}
                   >
-                    Print Sign Label
+                    Print {signQty > 1 ? `${signQty} Labels` : 'Label'}
                   </button>
                   {signText.trim() && (
                     <button
@@ -760,6 +815,8 @@ export default function Home() {
                       text={signText}
                       width={480}
                       height={320}
+                      boxNum={1}
+                      totalBoxes={signQty}
                     />
                   </div>
                 </div>
