@@ -258,6 +258,45 @@ export default function Home() {
     setQzError('');
     try {
       if (!qz.websocket.isActive()) {
+        // Set up certificate so QZ Tray trusts our app over secure connection
+        qz.security.setCertificatePromise((resolve) => {
+          resolve(`-----BEGIN CERTIFICATE-----
+MIIECzCCAvOgAwIBAgIGAZ7c++blMA0GCSqGSIb3DQEBCwUAMIGiMQswCQYDVQQG
+EwJVUzELMAkGA1UECAwCTlkxEjAQBgNVBAcMCUNhbmFzdG90YTEbMBkGA1UECgwS
+UVogSW5kdXN0cmllcywgTExDMRswGQYDVQQLDBJRWiBJbmR1c3RyaWVzLCBMTEMx
+HDAaBgkqhkiG9w0BCQEWDXN1cHBvcnRAcXouaW8xGjAYBgNVBAMMEVFaIFRyYXkg
+RGVtbyBDZXJ0MB4XDTI2MDYxNzIzMDU1NloXDTQ2MDYxNzIzMDU1NlowgaIxCzAJ
+BgNVBAYTAlVTMQswCQYDVQQIDAJOWTESMBAGA1UEBwwJQ2FuYXN0b3RhMRswGQYD
+VQQKDBJRWiBJbmR1c3RyaWVzLCBMTEMxGzAZBgNVBAsMElFaIEluZHVzdHJpZXMs
+IExMQzEcMBoGCSqGSIb3DQEJARYNc3VwcG9ydEBxei5pbzEaMBgGA1UEAwwRUVog
+VHJheSBEZW1vIENlcnQwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQCy
+5NnE/E9wHbZFjP+1W1LdDT26QFKJCV8NST7AbbakUM1drV5WhJOgqtZHlKvo74ic
+FZusk5nO2vVQuaHI2J8elMQMOpGc9LCjuxVdA6vApt3YZvAmCRxqq2cqkWE7cR5h
+YIPXHdkf3Bj3fp/kJwGyNfXHHjPDLpiF11KtLUZNT00FF0HrSNZIWW7KufLFehMk
+5SxmDSqr/m6FAD+1POjk4EPJwwBuc5RtSmqeNl91xNPsQl67w2zbXMVwmBJiu9oe
++MMBVSBoyaOIhs8zpI2uuRgKe5pdt/7wKhsf2ZmV8zaAD3v4UBALjDajAeBVEdQC
+anOUi4TebAMifUceFq51AgMBAAGjRTBDMBIGA1UdEwEB/wQIMAYBAf8CAQEwDgYD
+VR0PAQH/BAQDAgEGMB0GA1UdDgQWBBSwzgiwrFDPE/vwQcTp+utYhFIjrjANBgkq
+hkiG9w0BAQsFAAOCAQEASRCEdKCre6F6GezEJZZDtFczSbPG/16cvQHlHikmq9U8
+acU3K1R3jgDRAqQMSfCjPZib84xoquLjDe7enBNu9tu0VTgZ7a3B6d2kgB+IoEMm
+ZnDHbmgxzLjloo5oXikAI8RS4OOc/8FZHc7HrX26oR/1cewN9jlbVrRaa7bq/DNy
+5kIQOMhSl8yx6+Wi8XNvLNOMuFaEn45ObCTEsRRfNe8MSwrEOcA3rhHJs2U20E4J
+fJc2u9xxrsdIjAO48K4vr3SFvSxBIhmLA1TOp6t5WkxF8Pp2fxiQUBhSeJVFX87e
+gYtINOnw6FJxmGqeu/Bz+RXrt2Ms0cv4KJSMUZEzqA==
+-----END CERTIFICATE-----`);
+        });
+        // Sign messages server-side (private key never leaves the server)
+        qz.security.setSignatureAlgorithm('SHA512');
+        qz.security.setSignaturePromise((toSign) => (resolve, reject) => {
+          fetch('/api/qz-sign', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: toSign }),
+          })
+            .then((r) => r.json())
+            .then((d) => resolve(d.signature))
+            .catch(reject);
+        });
         await qz.websocket.connect();
       }
 
