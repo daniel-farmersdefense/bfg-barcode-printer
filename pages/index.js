@@ -744,7 +744,7 @@ export default function Home() {
             { id: 'order', label: `Order${skus.length ? ` (${skus.length})` : ''}` },
             { id: 'print', label: `Print${matchedLabels.length ? ` (${matchedLabels.length})` : ''}` },
             { id: 'sign', label: 'Sign Label' },
-            { id: 'ship', label: 'Ship Label' },
+            { id: 'ship', label: 'ASIN Label' },
           ].map((t) => (
             <button
               key={t.id}
