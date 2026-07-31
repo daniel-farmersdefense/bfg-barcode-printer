@@ -425,21 +425,23 @@ export default function Home() {
     } catch (_) {}
   }
 
-  function lookupVendorCode(customerName) {
-    if (!customerName) return '';
-    const words = (s) => s.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter((w) => w.length > 2);
-    const customerWords = new Set(words(customerName));
-    const match = vendors.find((v) => words(v.customerName).some((vw) => customerWords.has(vw)));
-    return match ? match.vendorCode : '';
-  }
-
   async function handleShipPdf(file) {
     setShipScanning(true);
     setShipError('');
     try {
-      const extracted = await extractShipDataFromPdf(file);
-      const vendorCodeFound = lookupVendorCode(extracted.toName);
-      setShipData({ ...extracted, vendorCode: vendorCodeFound });
+      const [extracted, vendorRes] = await Promise.all([
+        extractShipDataFromPdf(file),
+        fetch('/api/vendors'),
+      ]);
+      const vData = vendorRes.ok ? await vendorRes.json() : { vendors: [] };
+      const freshVendors = vData.vendors || [];
+      setVendors(freshVendors);
+
+      // Match by any significant word (3+ chars) from the vendor name appearing in the customer name
+      const words = (s) => s.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter((w) => w.length > 2);
+      const customerWords = new Set(words(extracted.toName || ''));
+      const matched = freshVendors.find((v) => words(v.customerName).some((vw) => customerWords.has(vw)));
+      setShipData({ ...extracted, vendorCode: matched ? matched.vendorCode : '' });
     } catch (err) {
       setShipError(`Could not read PDF: ${err.message}`);
     } finally {
