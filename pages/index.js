@@ -743,7 +743,7 @@ export default function Home() {
             { id: 'library', label: `Library${library.length ? ` (${library.length})` : ''}` },
             { id: 'order', label: `Order${skus.length ? ` (${skus.length})` : ''}` },
             { id: 'print', label: `Print${matchedLabels.length ? ` (${matchedLabels.length})` : ''}` },
-            { id: 'sign', label: 'Sign Label' },
+            { id: 'sign', label: 'Receiving Label' },
             { id: 'ship', label: 'ASIN Label' },
           ].map((t) => (
             <button
