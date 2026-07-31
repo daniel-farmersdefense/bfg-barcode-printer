@@ -427,9 +427,9 @@ export default function Home() {
 
   function lookupVendorCode(customerName) {
     if (!customerName) return '';
-    const norm = (s) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
-    const nameNorm = norm(customerName);
-    const match = vendors.find((v) => nameNorm.includes(norm(v.customerName)) || norm(v.customerName).includes(nameNorm));
+    const words = (s) => s.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter((w) => w.length > 2);
+    const customerWords = new Set(words(customerName));
+    const match = vendors.find((v) => words(v.customerName).some((vw) => customerWords.has(vw)));
     return match ? match.vendorCode : '';
   }
 
