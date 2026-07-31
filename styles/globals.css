@@ -64,7 +64,7 @@ input, textarea {
     flex-direction: column !important;
     align-items: center !important;
     justify-content: center !important;
-    padding: 0.1in !important;
+    padding: 0.05in 0.08in !important;
     background: white !important;
     page-break-after: always !important;
     break-after: page !important;
@@ -72,10 +72,12 @@ input, textarea {
   }
 
   .print-label-img {
-    max-width: 100% !important;
-    max-height: 0.9in !important;
+    width: 100% !important;
+    max-height: 1.1in !important;
     object-fit: contain !important;
     display: block !important;
+    image-rendering: pixelated !important;
+    image-rendering: crisp-edges !important;
   }
 
   .print-label-sku {
@@ -97,6 +99,14 @@ input, textarea {
     font-size: 8pt !important;
     color: #b45309 !important;
     text-align: center !important;
+  }
+
+  /* Shipping label — 4"×6" portrait */
+  .ship-print-label {
+    width: 4in !important;
+    height: 6in !important;
+    page-break-after: always !important;
+    break-after: page !important;
   }
 
   /* Sign label — 4"×6" landscape (6in wide × 4in tall) */
