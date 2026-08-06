@@ -154,24 +154,19 @@ function matchSku(sku, library) {
   let bestScore = -Infinity;
   for (const entry of library) {
     const entrySegs = segs(entry.sku);
-    // First segment must match — different product families never share barcodes
-    if (!querySegs[0] || !entrySegs[0] || querySegs[0] !== entrySegs[0]) continue;
-    let positionalMatches = 0;
-    const maxLen = Math.max(querySegs.length, entrySegs.length);
-    for (let i = 0; i < maxLen; i++) {
-      if (querySegs[i] && entrySegs[i] && querySegs[i] === entrySegs[i]) {
-        positionalMatches++;
-      }
-    }
-    const mismatches = maxLen - positionalMatches;
-    const score = positionalMatches - mismatches * 0.5;
+    // Every query segment must match its positional counterpart exactly —
+    // a mismatch on any segment means a different product entirely
+    const allMatch = querySegs.every((qs, i) => entrySegs[i] === qs);
+    if (!allMatch) continue;
+    // Score by how many extra entry segments exist (fewer extra = better match)
+    const extra = entrySegs.length - querySegs.length;
+    const score = querySegs.length - extra * 0.5;
     if (score > bestScore) {
       bestScore = score;
       bestEntry = entry;
     }
   }
-  // Require at least 2 positional matches to avoid single-segment coincidences
-  if (bestScore >= 1.5) return bestEntry;
+  if (bestScore > 0) return bestEntry;
   return null;
 }
 
